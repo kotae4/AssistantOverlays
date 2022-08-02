@@ -10,23 +10,34 @@ using StardewValley.Network;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Netcode;
+using StardewValley.TerrainFeatures;
 
 namespace kotae.AssistantOverlays
 {
     public class ModEntry : Mod
     {
-        enum EObjectType { Truffle, LadderStone, Ladder, Shaft, AnnoyingCrabMonster }
+        enum EObjectType
+        {
+            Debris, GenericForageable, GenericObject, FiberWeeds, HayGrass,
+            Tree, FruitTree, Crop, ResourceClump,
+            OverlayObject,
+            Bush, Truffle, ArtifactSpot, 
+            LadderStone, Ladder, Shaft, NPC, Monster, CrabMonster,
+            Quartz
+        }
         enum ECompassDirection { North, South, East, West, NorthWest, NorthEast, SouthEast, SouthWest, Center}
         Vector2[] DirVectors = new Vector2[] {new Vector2(0f, -1f), new Vector2(0f, 1f), new Vector2(1f, 0f), new Vector2(-1f, 0f),
             new Vector2(-1f, -1f), new Vector2(1f, -1f), new Vector2(1f, 1f), new Vector2(-1f, 1f)};
 
         class ObjReference
         {
+            public string Name;
             public int X, Y;
             public EObjectType Type;
             public object _Ref;
-            public ObjReference(int _TileX, int _TileY, EObjectType _type, object _ref = null)
+            public ObjReference(string _Name, int _TileX, int _TileY, EObjectType _type, object _ref = null)
             {
+                Name = _Name;
                 X = _TileX;
                 Y = _TileY;
                 Type = _type;
@@ -37,8 +48,7 @@ namespace kotae.AssistantOverlays
         Texture2D pixelTex;
         Rectangle outlineRect = new Rectangle(0, 0, Game1.tileSize, Game1.tileSize);
 
-        List<ObjReference> m_OutlineObjects = new List<ObjReference>();
-        List<ObjReference> m_OutlineNPCs = new List<ObjReference>();
+        Dictionary<EObjectType, List<ObjReference>> m_OutlineObjects = new Dictionary<EObjectType, List<ObjReference>>();
         MineShaft m_ActiveMineshaft;
         bool mineshaftHasLadderSpawned = false;
         bool mineshaftMustKillEnemies = false;
@@ -59,24 +69,37 @@ namespace kotae.AssistantOverlays
             _Helper = helper;
             Config = _Helper.ReadConfig<ModConfig>();
 
+            foreach (EObjectType type in Enum.GetValues(typeof(EObjectType)))
+            {
+                m_OutlineObjects.Add(type, new List<ObjReference>());
+            }
+
             pixelTex = new Texture2D(Game1.graphics.GraphicsDevice, 1, 1, false, SurfaceFormat.Color);
             pixelTex.SetData(new Color[] { Color.White });
             helper.Events.Display.RenderedWorld += Display_RenderedWorld;
             helper.Events.Display.RenderedHud += Display_RenderedHud;
-            helper.Events.Player.Warped += Player_Warped;
-            // this fires when a stone is broken (or stones if using an explosive) in the mines, and when a pig creates truffles on the farm
-            // it also fires when picking up produce from inside the coop/barns
-            helper.Events.World.ObjectListChanged += World_ObjectListChanged;
-            helper.Events.World.NpcListChanged += World_NpcListChanged;
             helper.Events.GameLoop.DayStarted += GameLoop_DayStarted;
+            helper.Events.GameLoop.OneSecondUpdateTicked += GameLoop_OneSecondUpdateTicked;
+        }
+
+        private void GameLoop_OneSecondUpdateTicked(object? sender, StardewModdingAPI.Events.OneSecondUpdateTickedEventArgs e)
+        {
+            Monitor.Log($"Client viewport: {Game1.viewport.X}, {Game1.viewport.Y}, {Game1.viewport.Width}, {Game1.viewport.Height}");
+        }
+
+        private void ClearOutlineList()
+        {
+            foreach (KeyValuePair<EObjectType, List<ObjReference>> pair in m_OutlineObjects)
+            {
+                pair.Value.Clear();
+            }
         }
 
         private void GameLoop_DayStarted(object sender, StardewModdingAPI.Events.DayStartedEventArgs e)
         {
             // clear all overlay lists
-            m_OutlineObjects.Clear();
+            ClearOutlineList();
             mineshaftLadderStones = 0;
-            m_OutlineNPCs.Clear();
         }
 
         ECompassDirection GetCompassDirectionFromTo(Vector2 from, Vector2 to)
@@ -94,17 +117,6 @@ namespace kotae.AssistantOverlays
                 }
             }
             return (ECompassDirection)retVal;
-        }
-
-        void FindTruffles(GameLocation location)
-        {
-            foreach (StardewValley.Object objOnFarm in location.objects.Values)
-            {
-                if (objOnFarm.Name.ToLower().Contains("truffle"))
-                {
-                    m_OutlineObjects.Add(new ObjReference((int)objOnFarm.TileLocation.X, (int)objOnFarm.TileLocation.Y, EObjectType.Truffle));
-                }
-            }
         }
 
         bool IsLadderStone(MineShaft shaft, int tileX, int tileY, int stonesRemaining, bool hasLadderSpawned)
@@ -127,15 +139,313 @@ namespace kotae.AssistantOverlays
             return false;
         }
 
-        void ProcessMineshaft(MineShaft shaft)
+        private void ProcessObjects(GameLocation location)
         {
-            mineshaftLadderStones = 0;
-            m_OutlineObjects.Clear();
-            mineshaft_NumShrooms = 0;
-            mineshaft_NumCopperNodes = 0;
-            mineshaft_NumIronNodes = 0;
-            mineshaft_NumGoldNodes = 0;
-            mineshaft_NumIridiumNodes = 0;
+            foreach (KeyValuePair<Vector2, StardewValley.Object> pair in location.netObjects.Pairs)
+            {
+                StardewValley.Object obj = pair.Value;
+                if (obj == null) continue;
+                //Monitor.Log($"Saw object {obj.DisplayName}");
+                string name = "Forage";
+                string itemName = (string.IsNullOrEmpty(obj.DisplayName) ? (string.IsNullOrEmpty(obj.Name) ? "unknown" : obj.Name) : obj.DisplayName);
+                Vector2 objPos = pair.Key;
+
+                if (obj.Name.ToLower().Contains("truffle"))
+                {
+                    m_OutlineObjects[EObjectType.Truffle].Add(new ObjReference($"{name} (Truffle)", (int)objPos.X, (int)objPos.Y, EObjectType.Truffle, obj));
+                }
+                else if ((obj.IsSpawnedObject) || (obj.isForage(location)))
+                {
+                    m_OutlineObjects[EObjectType.GenericForageable].Add(new ObjReference($"{name} ({itemName})", (int)objPos.X, (int)objPos.Y, EObjectType.GenericForageable, obj));
+                }
+                else if (obj.parentSheetIndex.Value == 590)
+                {
+                    // artifact spot
+                    m_OutlineObjects[EObjectType.ArtifactSpot].Add(new ObjReference("Artifact Spot", (int)objPos.X, (int)objPos.Y, EObjectType.ArtifactSpot, obj));
+                }
+                else
+                {
+                    // generic object
+                    m_OutlineObjects[EObjectType.GenericObject].Add(new ObjReference($"Generic Item ({itemName})", (int)objPos.X, (int)objPos.Y, EObjectType.GenericObject, obj));
+                }
+            }
+        }
+
+        void ProcessIndividualTerrainFeature(TerrainFeature feature, GameLocation location)
+        {
+            if (feature is StardewValley.TerrainFeatures.Tree)
+            {
+                //Monitor.Log("Saw Tree: " + feature.ToString() + "(" + feature.GetType().Name + ")");
+                Tree obj = feature as Tree;
+                // TO-DO:
+                // RNG calculation for if shaking the tree will yield anything
+                // for now, i'm just going to check that it **could** yield something
+                if (obj.hasSeed.Value == true)
+                {
+                    string treeName = "unknown";
+                    switch (obj.treeType.Value)
+                    {
+                        case 1:
+                            treeName = "oak";
+                            break;
+                        case 2:
+                            treeName = "maple";
+                            break;
+                        case 3:
+                            treeName = "pine";
+                            break;
+                        case 7:
+                            treeName = "mushroom";
+                            break;
+                        case 8:
+                            treeName = "mahogany";
+                            break;
+                        case 6:
+                        case 9:
+                            treeName = "palm";
+                            break;
+                    }
+                    m_OutlineObjects[EObjectType.Tree].Add(new ObjReference($"Shake-able Tree ({treeName})", (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.Tree, obj));
+                }
+                // TO-DO:
+                // maybe check for tapper as well? or maybe the tapper is part of 'objects' list?
+            }
+            else if (feature is StardewValley.TerrainFeatures.FruitTree)
+            {
+                //Monitor.Log("Saw FruitTree: " + feature.ToString() + "(" + feature.GetType().Name + ")");
+                FruitTree obj = feature as FruitTree;
+                if (obj.fruitsOnTree.Value > 0)
+                {
+                    string name = $"Fruit Tree";
+                    string fruitName = "unknown_fruit";
+                    try
+                    {
+                        if (Game1.objectInformation.ContainsKey(obj.indexOfFruit.Value) == true)
+                        {
+                            fruitName = Game1.objectInformation[obj.indexOfFruit.Value].Split('/')[0];
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Monitor.Log($"Handled exception parsing fruit tree item (item index={obj.indexOfFruit.Value}): {ex.Message}");
+                    }
+                    finally
+                    {
+                        name = $"{name} ({obj.fruitsOnTree.Value} {fruitName})";
+                        m_OutlineObjects[EObjectType.FruitTree].Add(new ObjReference(name, (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.FruitTree, obj));
+                    }
+                }
+            }
+            else if (feature is StardewValley.TerrainFeatures.Grass)
+            {
+                Grass obj = feature as Grass;
+                //Monitor.Log($"Saw Grass: {feature} ({feature.GetType().Name}) (numWeeds: {obj.numberOfWeeds.Value})");
+                // TO-DO:
+                // RNG calculation for whether scything this grass will yield hay
+                // it seems there's also a super tiny chance that it could yield object IDs 114, 4, or 92. don't know what those are.
+                m_OutlineObjects[EObjectType.HayGrass].Add(new ObjReference("Hay Grass", (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.HayGrass, obj));
+            }
+            else if (feature is StardewValley.TerrainFeatures.HoeDirt)
+            {
+                //Monitor.Log("Saw HoeDirt: " + feature.ToString() + "(" + feature.GetType().Name + ")");
+                HoeDirt obj = feature as HoeDirt;
+                string name = "Crop";
+                if ((obj.crop != null) && (obj.readyForHarvest()))
+                {
+                    string cropName = "unknown";
+                    if (Game1.objectInformation.ContainsKey(obj.crop.indexOfHarvest.Value))
+                    {
+                        cropName = Game1.objectInformation[obj.crop.indexOfHarvest.Value].Split('/')[0];
+                    }
+                    m_OutlineObjects[EObjectType.Crop].Add(new ObjReference($"{name} ({cropName})", (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.Crop, obj));
+                }
+            }
+            else if (feature is StardewValley.TerrainFeatures.Quartz)
+            {
+                //Monitor.Log("Saw Quartz Terrain Feature?");
+                Quartz obj = feature as Quartz;
+                m_OutlineObjects[EObjectType.Quartz].Add(new ObjReference("Quartz?? (no idea)", (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.Quartz, obj));
+            }
+            else if (feature is StardewValley.TerrainFeatures.Bush)
+            {
+                Bush obj = feature as Bush;
+
+                if ((obj.townBush.Value == false) && (obj.tileSheetOffset.Value == 1) && (obj.inBloom(Game1.GetSeasonForLocation(location), Game1.dayOfMonth)))
+                {
+                    m_OutlineObjects[EObjectType.Bush].Add(new ObjReference($"Bush [{(int)obj.tilePosition.Value.X}, {(int)obj.tilePosition.Value.Y}]", (int)obj.tilePosition.Value.X, (int)obj.tilePosition.Value.Y, EObjectType.Bush, obj));
+                }
+            }
+            else if (feature is LargeTerrainFeature)
+            {
+                Monitor.Log($"Saw LargeTerrainFeature as part of normal TerrainFeature's ({feature.GetType().Name})");
+            }
+            // NOTE:
+            // GameLocation has its own resourceClumps field, so maybe this isn't part of the terrainFeatures list.
+            else if (feature is StardewValley.TerrainFeatures.ResourceClump)
+            {
+                //Monitor.Log("Saw ResourceClump: " + feature.ToString() + "(" + feature.GetType().Name + ")");
+                ResourceClump obj = feature as ResourceClump;
+                m_OutlineObjects[EObjectType.ResourceClump].Add(new ObjReference("ResourceClump (ERROR)", (int)obj.tile.Value.X, (int)obj.tile.Value.Y, EObjectType.ResourceClump, obj));
+            }
+        }
+
+        void ProcessTerrainFeatures(GameLocation location)
+        {
+            foreach (KeyValuePair<Vector2, StardewValley.TerrainFeatures.TerrainFeature> pair in location.terrainFeatures.Pairs)
+            {
+                StardewValley.TerrainFeatures.TerrainFeature feature = pair.Value;
+                if (feature == null) continue;
+
+                ProcessIndividualTerrainFeature(feature, location);
+            }
+        }
+
+        void ProcessLargeTerrainFeatures(GameLocation location)
+        {
+            foreach (StardewValley.TerrainFeatures.LargeTerrainFeature feature in location.largeTerrainFeatures)
+            {
+                if (feature == null) continue;
+
+                ProcessIndividualTerrainFeature(feature, location);
+            }
+        }
+
+        void ProcessResourceClumps(GameLocation location)
+        {
+            foreach (ResourceClump clump in location.resourceClumps)
+            {
+                //Monitor.Log($"Saw ResourceClump {clump.parentSheetIndex}");
+
+                string name = "ResourceClump (Unknown)";
+                if (clump is GiantCrop)
+                {
+                    GiantCrop giantCrop = clump as GiantCrop;
+                    int which = giantCrop.which.Value;
+                    switch (which)
+                    {
+                        case GiantCrop.cauliflower:
+                            name = "Giant Crop (cauliflower)";
+                            break;
+                        case GiantCrop.melon:
+                            name = "Giant Crop (melon)";
+                            break;
+                        case GiantCrop.pumpkin:
+                            name = "Giant Crop (pumpkin)";
+                            break;
+                        default:
+                            name = "Giant Crop (unknown)";
+                            break;
+                    }
+                }
+                else
+                {
+                    switch (clump.parentSheetIndex.Value)
+                    {
+                        case ResourceClump.stumpIndex:
+                            {
+                                name = "Stump";
+                                break;
+                            }
+                        case ResourceClump.hollowLogIndex:
+                            {
+                                name = "Hollow Log";
+                                break;
+                            }
+                        case ResourceClump.meteoriteIndex:
+                            {
+                                name = "Meteorite";
+                                break;
+                            }
+                        case ResourceClump.boulderIndex:
+                            {
+                                name = "Farm Boulder";
+                                break;
+                            }
+                        case ResourceClump.mineRock1Index:
+                        case ResourceClump.mineRock2Index:
+                        case ResourceClump.mineRock3Index:
+                        case ResourceClump.mineRock4Index:
+                            {
+                                name = "Mine Boulder";
+                                break;
+                            }
+                    }
+                }
+                m_OutlineObjects[EObjectType.ResourceClump].Add(new ObjReference(name, (int)clump.tile.Value.X, (int)clump.tile.Value.Y, EObjectType.ResourceClump, clump));
+            }
+        }
+
+        
+
+        // NOTE:
+        // seems like it would contain robin's lost axe and lewis' purple shorts
+        // might also contain other stuff
+        void ProcessOverlayObjects(GameLocation location)
+        {
+            foreach (KeyValuePair<Vector2, StardewValley.Object> pair in location.overlayObjects)
+            {
+                if (pair.Value == null) continue;
+
+                //Monitor.Log($"Saw OverlayObject {pair.Value.DisplayName}");
+                StardewValley.Object obj = pair.Value;
+                m_OutlineObjects[EObjectType.OverlayObject].Add(new ObjReference(obj.DisplayName, (int)obj.TileLocation.X, (int)obj.TileLocation.Y, EObjectType.OverlayObject, obj));
+            }
+        }
+
+        void ProcessDebris(GameLocation location)
+        {
+            foreach (Debris debris in location.debris)
+            {
+                //Monitor.Log($"Saw debris {debris.spriteChunkSheetName} (item: {(debris.item != null ? debris.item.DisplayName : "null")})");
+                string name = "Debris";
+                string itemName = "unknown";
+                foreach (Chunk chunk in debris.Chunks)
+                {
+                    if (debris.item != null)
+                        itemName = debris.item.DisplayName;
+
+                    m_OutlineObjects[EObjectType.Debris].Add(new ObjReference($"{name} ({itemName})", (int)chunk.position.Value.X, (int)chunk.position.Value.Y, EObjectType.ResourceClump, debris));
+                }
+            }
+        }
+
+        void ProcessFurniture(GameLocation location)
+        {
+            foreach (StardewValley.Objects.Furniture furniture in location.furniture)
+            {
+                Monitor.Log($"Saw Furniture: {furniture.DisplayName} ({furniture.GetType().Name})");
+            }
+        }
+
+        void ProcessNPCs(GameLocation location)
+        {
+            foreach (StardewValley.NPC npc in location.characters)
+            {
+                //Monitor.Log($"Saw NPC {npc.displayName}");
+
+                if (npc.IsMonster)
+                {
+                    // "Rock Crab" is npc.Name on floor 15.
+                    // "Lava Crab" on floor 112
+                    // "Iridium Crab" on SC 32
+                    if ((npc.Name == "Rock Crab") || (npc.Name == "Lava Crab") || (npc.Name == "Iridium Crab"))
+                    {
+                        m_OutlineObjects[EObjectType.CrabMonster].Add(new ObjReference(npc.Name, (int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.CrabMonster, npc));
+                    }
+                    else
+                    {
+                        m_OutlineObjects[EObjectType.Monster].Add(new ObjReference(npc.Name, (int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.Monster, npc));
+                    }
+                }
+                else
+                {
+                    m_OutlineObjects[EObjectType.NPC].Add(new ObjReference(npc.Name, (int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.NPC, npc));
+                }
+            }
+        }
+
+        void ProcessSpecial_Mineshaft(MineShaft shaft)
+        {
             // the mineshaft has 3 layers:
             // [0] is Back
             // [1] is Buildings
@@ -174,15 +484,11 @@ namespace kotae.AssistantOverlays
                         // gold has sheetIndex of 764
                         // copper has sheetIndex of 751
                         // iridum is probably 765? 668 and 670 are something too
-                        if (item.name.Contains("Mushroom"))
-                        {
-                            mineshaft_NumShrooms += 1;
-                        }
-                        else if (item.Name.Equals("Stone"))
+                        if (item.Name.Equals("Stone"))
                         {
                             if (IsLadderStone(shaft, i, j, stonesRemaining, mineshaftHasLadderSpawned))
                             {
-                                m_OutlineObjects.Add(new ObjReference((int)item.TileLocation.X, (int)item.TileLocation.Y, EObjectType.LadderStone));
+                                m_OutlineObjects[EObjectType.LadderStone].Add(new ObjReference("Ladder Stone", (int)item.TileLocation.X, (int)item.TileLocation.Y, EObjectType.LadderStone));
                                 mineshaftLadderStones++;
                             }
                             // check if it's an ore too, for text overlays
@@ -197,20 +503,21 @@ namespace kotae.AssistantOverlays
                         }
                     }
                     // check if tileindex on Buildings layer is 173 (ladder) or 174 (shaft)
+                    // (this detects existing ladders / shafts, not hidden under a rock)
                     else if (areLayersSameSize)
                     {
                         xTile.Tiles.Tile curTile = buildingsLayer.Tiles[i, j];
                         if (curTile == null) continue;
                         if (curTile.TileIndex == 173)
                         {
-                            m_OutlineObjects.Add(new ObjReference(i, j, EObjectType.Ladder));
+                            m_OutlineObjects[EObjectType.Ladder].Add(new ObjReference("Ladder", i, j, EObjectType.Ladder));
                             mineshaftLadderPos.X = i;
                             mineshaftLadderPos.Y = j;
                             mineshaftHasLadderSpawned = true;
                         }
                         else if (curTile.TileIndex == 174)
                         {
-                            m_OutlineObjects.Add(new ObjReference(i, j, EObjectType.Shaft));
+                            m_OutlineObjects[EObjectType.Shaft].Add(new ObjReference("Shaft", i, j, EObjectType.Shaft));
                             mineshaftLadderPos.X = i;
                             mineshaftLadderPos.Y = j;
                             mineshaftHasLadderSpawned = true;
@@ -220,103 +527,52 @@ namespace kotae.AssistantOverlays
             }
         }
 
-        private void World_ObjectListChanged(object sender, StardewModdingAPI.Events.ObjectListChangedEventArgs e)
+        void ProcessSpecial_Buildings(BuildableGameLocation buildableLocation)
         {
-#if DEBUG
-            this.Monitor.Log("Objects on '" + e.Location.NameOrUniqueName + "' changed (" + e.Added.Count().ToString() + " added, " + e.Removed.Count().ToString() + " removed)", LogLevel.Info);
-#endif
+            foreach (StardewValley.Buildings.Building building in buildableLocation.buildings)
+            {
+                if (building == null) continue;
+
+                Monitor.Log($"Saw building {building.ToString()} ({building.GetType().Name})");
+            }
+        }
+        void ProcessCurrentLocation()
+        {
+            ClearOutlineList();
+
+            Farmer localPlayer = Game1.player;
+            GameLocation location = localPlayer.currentLocation;
             // NOTE:
-            // the Vector2 in KeyValuePair<Vector2, Object> used for the Added and Removed collections represent the TileCoordinate
-            // if location is farm, check if truffle and add to overlay list
-            if ((e.Location.IsFarm) && (e.IsCurrentLocation))
-            {
-                foreach (KeyValuePair<Vector2, StardewValley.Object> addedObj in e.Added)
-                {
-                    if (addedObj.Value.name == "Truffle")
-                        m_OutlineObjects.Add(new ObjReference((int)addedObj.Key.X, (int)addedObj.Key.Y, EObjectType.Truffle));
-                }
-                foreach (KeyValuePair<Vector2, StardewValley.Object> removedObj in e.Removed)
-                {
-                    for (int outlineIndex = m_OutlineObjects.Count - 1; outlineIndex >= 0; outlineIndex--)
-                    {
-                        ObjReference outlineObj = m_OutlineObjects[outlineIndex];
-                        if ((outlineObj.X == removedObj.Key.X) && (outlineObj.Y == removedObj.Key.Y))
-                        {
-                            m_OutlineObjects.RemoveAt(outlineIndex);
-                            outlineIndex--;
-                            break;
-                        }
-                    }
-                }
-            }
-            // if location is mineshaft, recalculate where ladder is hiding
-            else if ((e.Location.NameOrUniqueName.StartsWith("UndergroundMine")) && (e.IsCurrentLocation))
-            {
-                // so this is called whenever a stone is broken, but NOT for when a ladder is spawned.
-                // we have to redo all the ladder stones because stonesRemaining is one of the variables used in the prediction
-                ProcessMineshaft(e.Location as MineShaft);
-            }
-        }
+            // GameLocation also has a 'furniture' field, but it seems like it's only cosmetic stuff
 
-        private void World_NpcListChanged(object sender, StardewModdingAPI.Events.NpcListChangedEventArgs e)
-        {
-            this.Monitor.Log("NPCs on '" + e.Location.NameOrUniqueName + "' changed (" + e.Added.Count().ToString() + " added, " + e.Removed.Count().ToString() + " removed)", LogLevel.Trace);
-            if (e.IsCurrentLocation)
-            {
-                if (e.Location.NameOrUniqueName.StartsWith("UndergroundMine"))
-                {
-                    if ((m_ActiveMineshaft != null) && (m_ActiveMineshaft.EnemyCount == 0))
-                    {
-                        ProcessMineshaft(m_ActiveMineshaft);
-                    }
-                    foreach (NPC removedNPC in e.Removed)
-                    {
-                        for (int outlineIndex = m_OutlineNPCs.Count - 1; outlineIndex >= 0; outlineIndex--)
-                        {
-                            ObjReference outlineNPC = m_OutlineNPCs[outlineIndex];
-                            if (outlineNPC._Ref == removedNPC)
-                            {
-                                m_OutlineNPCs.RemoveAt(outlineIndex);
-                                outlineIndex--;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+            //Monitor.Log("=== Processing Objects ===");
+            ProcessObjects(location);
+            //Monitor.Log($"=== Processing [{location.terrainFeatures.Count()}] Terrain Features ===");
+            ProcessTerrainFeatures(location);
+            //Monitor.Log("=== Processing Large Terrain Features ===");
+            ProcessLargeTerrainFeatures(location);
+            //Monitor.Log("=== Processing Resource Clumps ===");
+            ProcessResourceClumps(location);
+            
+            //Monitor.Log("=== Processing Overlay Objects ===");
+            ProcessOverlayObjects(location);
+            //Monitor.Log("=== Processing Debris ===");
+            ProcessDebris(location);
+            //Monitor.Log("=== Processing Furniture ===");
+            ProcessFurniture(location);
+            //Monitor.Log("=== Processing NPCs ===");
+            ProcessNPCs(location);
 
-        private void Player_Warped(object sender, StardewModdingAPI.Events.WarpedEventArgs e)
-        {
-#if DEBUG
-            this.Monitor.Log("Player Warped to '" + e.NewLocation.NameOrUniqueName + "'", LogLevel.Info);
-#endif
-            // clear overlay lists of all old locations
-            m_OutlineObjects.Clear();
-            m_OutlineNPCs.Clear();
-
-            if ((e.NewLocation.IsFarm) && (e.IsLocalPlayer))
+            if (location is BuildableGameLocation)
             {
-                // if location is farm, check e.NewLocation.objects[] for all existing truffles
-                FindTruffles(e.NewLocation);
+                //Monitor.Log("=== Processing Buildings ===");
+                ProcessSpecial_Buildings((location as BuildableGameLocation));
             }
-            else if ((e.NewLocation.NameOrUniqueName.StartsWith("UndergroundMine")) && (e.IsLocalPlayer))
+
+            if (location is MineShaft)
             {
-                // if location is UndergroundMineXXX, calculate where the ladder is hiding
-                m_ActiveMineshaft = e.NewLocation as MineShaft;
-                mineshaftMustKillEnemies = m_ActiveMineshaft.mustKillAllMonstersToAdvance();
-                ProcessMineshaft(m_ActiveMineshaft);
-                // TO-DO:
-                // find and mark all rock crabs, too. fuck those guys.
-                foreach (NPC npc in e.NewLocation.characters)
-                {
-                    // "Rock Crab" is npc.Name on floor 15.
-                    // "Lava Crab" on floor 112
-                    // "Iridium Crab" on SC 32
-                    if ((npc.name == "Rock Crab") || (npc.name == "Lava Crab") || (npc.name == "Iridium Crab"))
-                    {
-                        m_OutlineNPCs.Add(new ObjReference((int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.AnnoyingCrabMonster, npc));
-                    }
-                }
+                //Monitor.Log("=== Processing Mineshaft ===");
+                ProcessSpecial_Mineshaft((location as MineShaft));
             }
         }
 
@@ -328,46 +584,144 @@ namespace kotae.AssistantOverlays
             sb.Draw(pixelTex, new Rectangle(rect.Right, rect.Top, lineThickness, rect.Height), color);
         }
 
+        // credit: Viviano Cantu, et al
+        // source: https://stackoverflow.com/a/19957844
+        //this returns the angle between two points in radians
+        private float getRotation(float x, float y, float x2, float y2)
+        {
+            float adj = x - x2;
+            float opp = y - y2;
+            float tan = opp / adj;
+            float res = MathHelper.ToDegrees((float)Math.Atan2(opp, adj));
+            res = (res - 180) % 360;
+            if (res < 0) { res += 360; }
+            res = MathHelper.ToRadians(res);
+            return res;
+        }
+
+        void DrawLineTo(SpriteBatch sb, Vector2 start, Vector2 end, Color color, int lineThickness = 3)
+        {
+            // credit: Viviano Cantu, et al
+            // source: https://stackoverflow.com/a/19957844
+            // changes: removed comments at end of lines, changed variable names
+            int length = (int)Vector2.Distance(start, end);
+            float rotation = getRotation(start.X, start.Y, end.X, end.Y);
+            Rectangle rect = new Rectangle((int)start.X, (int)start.Y, length, lineThickness);
+
+            sb.Draw(pixelTex, rect, null, color, rotation, Vector2.Zero, SpriteEffects.None, 0.0f);
+        }
+
+        Color GetColorByObjectType(EObjectType type)
+        {
+            Color retColor = Color.White;
+            switch (type)
+            {
+                case EObjectType.Truffle:
+                    retColor = Config.TruffleColor;
+                    break;
+                case EObjectType.LadderStone:
+                    retColor = Config.LadderStoneColor;
+                    break;
+                case EObjectType.Ladder:
+                case EObjectType.Shaft:
+                    retColor = Config.LadderColor;
+                    break;
+                case EObjectType.Monster:
+                case EObjectType.CrabMonster:
+                    retColor = Config.EnemyColor;
+                    break;
+                case EObjectType.Quartz:
+                    retColor = Config.QuartzColor;
+                    break;
+                case EObjectType.OverlayObject:
+                    retColor = Config.OverlayObjectColor;
+                    break;
+                case EObjectType.Debris:
+                    retColor = Config.DebrisColor;
+                    break;
+                case EObjectType.Bush:
+                    retColor = Config.BushColor;
+                    break;
+                case EObjectType.ResourceClump:
+                    retColor = Config.ResourceClumpColor;
+                    break;
+                case EObjectType.HayGrass:
+                    retColor = Config.HayGrassColor;
+                    break;
+                case EObjectType.GenericForageable:
+                    retColor = Config.GenericForageableColor;
+                    break;
+                case EObjectType.Tree:
+                case EObjectType.FruitTree:
+                    retColor = Config.TreeColor;
+                    break;
+                case EObjectType.Crop:
+                    retColor = Config.CropColor;
+                    break;
+                case EObjectType.ArtifactSpot:
+                    retColor = Config.ArtifactSpotColor;
+                    break;
+                case EObjectType.GenericObject:
+                    retColor = Config.GenericObjectColor;
+                    break;
+            }
+            return retColor;
+        }
+
         private void Display_RenderedWorld(object sender, StardewModdingAPI.Events.RenderedWorldEventArgs e)
         {
             if ((!Context.IsWorldReady) || (Game1.eventUp)) return;
 
+            // gather all the data
+            ProcessCurrentLocation();
+
+            // now draw all the outlines
             xTile.Dimensions.Rectangle viewport = Game1.viewport;
-
-            // draw all overlays
-            foreach (ObjReference obj in m_OutlineObjects)
+            bool localPlayerIsInMines = ((Game1.player.currentLocation != null) && (Game1.player.currentLocation.Name.ToLower().Contains("mine")));
+            float closestLadderDist = float.MaxValue;
+            ObjReference closestLadderObj = null;
+            Vector2 localPlayerScreenPos = new Vector2(Game1.player.Position.X - viewport.X, Game1.player.Position.Y - viewport.Y);
+            foreach (KeyValuePair<EObjectType, List<ObjReference>> pair in m_OutlineObjects)
             {
-                Color activeColor = Color.White;
-                switch (obj.Type)
+                Color activeColor = GetColorByObjectType(pair.Key);
+                foreach (ObjReference obj in pair.Value)
                 {
-                    case EObjectType.Truffle:
-                        activeColor = Config.TruffleColor;
-                        break;
-                    case EObjectType.LadderStone:
-                        activeColor = Config.LadderStoneColor;
-                        break;
-                    case EObjectType.Ladder:
-                        activeColor = Config.LadderColor;
-                        break;
-                    case EObjectType.Shaft:
-                        activeColor = Config.ShaftColor;
-                        break;
-                }
-                outlineRect.X = (obj.X * Game1.tileSize) - viewport.X;
-                outlineRect.Y = (obj.Y * Game1.tileSize) - viewport.Y;
-                DrawOutline(e.SpriteBatch, outlineRect, activeColor, 3);
-            }
-
-            foreach (ObjReference npc in m_OutlineNPCs)
-            {
-                if ((npc != null) && (npc._Ref != null))
-                {
-                    NPC monsterNPC = npc._Ref as NPC;
-                    Vector2 loc = monsterNPC.Position;
-                    outlineRect.X = (int)loc.X  - viewport.X;
+                    if (obj == null) continue;
+                    Vector2 loc = new Vector2(obj.X * Game1.tileSize, obj.Y * Game1.tileSize);
+                    if (((pair.Key == EObjectType.NPC) || (pair.Key == EObjectType.CrabMonster) || (pair.Key == EObjectType.Monster))
+                        && (obj._Ref != null))
+                    {
+                        loc = (obj._Ref as NPC).Position;
+                    }
+                    outlineRect.X = (int)loc.X - viewport.X;
                     outlineRect.Y = (int)loc.Y - viewport.Y;
-                    DrawOutline(e.SpriteBatch, outlineRect, Config.EnemyColor, 3);
+                    DrawOutline(e.SpriteBatch, outlineRect, activeColor, 3);
+
+                    if (obj._Ref is StardewValley.Monsters.Monster)
+                    {
+                        Vector2 textDimensions = Game1.smallFont.MeasureString((obj._Ref as StardewValley.Monsters.Monster).Health.ToString());
+                        outlineRect.X = (outlineRect.X + (Game1.tileSize / 2)) - (int)(textDimensions.X / 2);
+                        outlineRect.Y = (outlineRect.Y - 15) - (int)textDimensions.Y;
+                        e.SpriteBatch.DrawString(Game1.smallFont, (obj._Ref as StardewValley.Monsters.Monster).Health.ToString(), new Vector2(outlineRect.X, outlineRect.Y), activeColor);
+                    }
+
+                    if ((localPlayerIsInMines) && ((obj.Type == EObjectType.LadderStone) || (obj.Type == EObjectType.Ladder)))
+                    {
+                        float dist = Vector2.DistanceSquared(localPlayerScreenPos, new Vector2(outlineRect.X, outlineRect.Y));
+                        if (dist < closestLadderDist)
+                        {
+                            closestLadderDist = dist;
+                            closestLadderObj = obj;
+                        }
+                    }
                 }
+            }
+            if ((localPlayerIsInMines) && (closestLadderObj != null))
+            {
+                // draw line to closest ladder
+                outlineRect.X = (int)(closestLadderObj.X * Game1.tileSize) - viewport.X + (Game1.tileSize / 2);
+                outlineRect.Y = (int)(closestLadderObj.Y * Game1.tileSize) - viewport.Y + (Game1.tileSize / 2);
+                DrawLineTo(e.SpriteBatch, localPlayerScreenPos, new Vector2(outlineRect.X, outlineRect.Y), GetColorByObjectType(closestLadderObj.Type));
             }
         }
 
@@ -377,13 +731,16 @@ namespace kotae.AssistantOverlays
             // show helpful information based on where the player is located:
             // farm: how many truffles are waiting to be picked up
             // mineshaft: whether the ladder has already spawned, how many enemies remain, whether all enemies need to be killed
+            // everywhere: how many generic forageables are on the map
+            string drawStr = "";
             if (Game1.player.currentLocation.IsFarm)
             {
-                e.SpriteBatch.DrawString(Game1.smallFont, "Truffles: " + m_OutlineObjects.Count.ToString(), new Vector2(10f, 65f), Config.TextColor);
+                drawStr = "Truffles: " + m_OutlineObjects[EObjectType.Truffle].Count.ToString();
             }
             else if ((Game1.player.currentLocation.NameOrUniqueName.StartsWith("UndergroundMine")) && (m_ActiveMineshaft != null))
             {
-                string drawStr = "Enemies: " + m_ActiveMineshaft.EnemyCount.ToString();
+                MineShaft shaft = Game1.player.currentLocation as MineShaft;
+                drawStr = "Enemies: " + shaft.EnemyCount.ToString();
                 if (mineshaft_NumShrooms > 0)
                 {
                     drawStr += "\nMushrooms: " + mineshaft_NumShrooms.ToString();
@@ -419,8 +776,35 @@ namespace kotae.AssistantOverlays
                         drawStr += "\nLadderStones: " + mineshaftLadderStones.ToString();
                     }
                 }
-                e.SpriteBatch.DrawString(Game1.smallFont, drawStr, new Vector2(10f, 65f), Config.TextColor);
             }
+
+            // list out all the forageables on the map
+            Dictionary<string, int> specificObjCounts = new Dictionary<string, int>();
+            foreach(KeyValuePair<EObjectType, List<ObjReference>> pair in m_OutlineObjects)
+            {
+                if ((pair.Value == null) || (pair.Value.Count == 0)) continue;
+                
+                drawStr += "\n" + pair.Key.ToString() + ": " + pair.Value.Count.ToString();
+                foreach (ObjReference obj in pair.Value)
+                {
+                    if (obj == null) continue;
+
+                    if (specificObjCounts.ContainsKey(obj.Name))
+                        specificObjCounts[obj.Name]++;
+                    else
+                        specificObjCounts[obj.Name] = 1;
+
+                }
+
+                foreach (KeyValuePair<string, int> objPair in specificObjCounts)
+                {
+                    drawStr += "\n\t" + objPair.Key + ": " + objPair.Value.ToString();
+                }
+
+                specificObjCounts.Clear();
+            }
+
+            e.SpriteBatch.DrawString(Game1.smallFont, drawStr, new Vector2(10f, 65f), Config.TextColor);
         }
     }
 }
