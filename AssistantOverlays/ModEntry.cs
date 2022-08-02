@@ -22,7 +22,7 @@ namespace kotae.AssistantOverlays
             Tree, FruitTree, Crop, ResourceClump,
             OverlayObject,
             Bush, Truffle, ArtifactSpot, 
-            LadderStone, Ladder, Shaft, NPC, Monster, CrabMonster,
+            LadderStone, Ladder, NPC, Monster,
             Quartz
         }
         enum ECompassDirection { North, South, East, West, NorthWest, NorthEast, SouthEast, SouthWest, Center}
@@ -69,9 +69,75 @@ namespace kotae.AssistantOverlays
 
             pixelTex = new Texture2D(Game1.graphics.GraphicsDevice, 1, 1, false, SurfaceFormat.Color);
             pixelTex.SetData(new Color[] { Color.White });
+            helper.Events.GameLoop.GameLaunched += GameLoop_GameLaunched;
             helper.Events.Display.RenderedWorld += Display_RenderedWorld;
             helper.Events.Display.RenderedHud += Display_RenderedHud;
             helper.Events.GameLoop.DayStarted += GameLoop_DayStarted;
+        }
+
+        private void GameLoop_GameLaunched(object sender, StardewModdingAPI.Events.GameLaunchedEventArgs e)
+        {
+            // get Generic Mod Config Menu's API (if it's installed)
+            var configMenu = this.Helper.ModRegistry.GetApi<GenericModConfigMenu.IGenericModConfigMenuApi>("spacechase0.GenericModConfigMenu");
+            if (configMenu is null)
+                return;
+
+            // register mod
+            configMenu.Register(
+                mod: this.ModManifest,
+                reset: () => this.Config = new ModConfig(),
+                save: () => this.Helper.WriteConfig(this.Config)
+            );
+
+            foreach (KeyValuePair<EObjectType, ConfigCategoryOptions> pair in m_OptionsConfig)
+            {
+                configMenu.AddSectionTitle(
+                    mod: this.ModManifest,
+                    text: () => pair.Key.ToString()
+                    );
+                configMenu.AddBoolOption(
+                    mod: this.ModManifest,
+                    name: () => "Should Show In List",
+                    getValue: () => pair.Value.ShouldShowInList,
+                    setValue: value => pair.Value.ShouldShowInList = value
+                    );
+                configMenu.AddBoolOption(
+                    mod: this.ModManifest,
+                    name: () => "Should Draw Overlay",
+                    getValue: () => pair.Value.ShouldDrawOverlay,
+                    setValue: value => pair.Value.ShouldDrawOverlay = value
+                    );
+                configMenu.AddBoolOption(
+                    mod: this.ModManifest,
+                    name: () => "Should Draw Snaplines",
+                    getValue: () => pair.Value.ShouldDrawSnaplines,
+                    setValue: value => pair.Value.ShouldDrawSnaplines = value
+                    );
+                configMenu.AddNumberOption(
+                    mod: this.ModManifest,
+                    name: () => "Draw Color R",
+                    getValue: () => pair.Value.DrawColor.R,
+                    setValue: value => pair.Value.DrawColor = new Color(value, pair.Value.DrawColor.G, pair.Value.DrawColor.B),
+                    min: 0,
+                    max: 255
+                    );
+                configMenu.AddNumberOption(
+                    mod: this.ModManifest,
+                    name: () => "Draw Color G",
+                    getValue: () => pair.Value.DrawColor.G,
+                    setValue: value => pair.Value.DrawColor = new Color(pair.Value.DrawColor.R, value, pair.Value.DrawColor.B),
+                    min: 0,
+                    max: 255
+                    );
+                configMenu.AddNumberOption(
+                    mod: this.ModManifest,
+                    name: () => "Draw Color B",
+                    getValue: () => pair.Value.DrawColor.B,
+                    setValue: value => pair.Value.DrawColor = new Color(pair.Value.DrawColor.R, pair.Value.DrawColor.G, value),
+                    min: 0,
+                    max: 255
+                    );
+            }
         }
 
         void MapConfigOptions()
@@ -88,7 +154,7 @@ namespace kotae.AssistantOverlays
             m_OptionsConfig[EObjectType.FiberWeeds] = Config.FiberWeedsOptions;
             m_OptionsConfig[EObjectType.HayGrass] = Config.HayGrassOptions;
             m_OptionsConfig[EObjectType.Tree] = Config.TreeOptions;
-            m_OptionsConfig[EObjectType.FruitTree] = Config.TreeOptions;
+            m_OptionsConfig[EObjectType.FruitTree] = Config.FruitTreeOptions;
             m_OptionsConfig[EObjectType.Crop] = Config.CropOptions;
             m_OptionsConfig[EObjectType.ResourceClump] = Config.ResourceClumpOptions;
             m_OptionsConfig[EObjectType.OverlayObject] = Config.OverlayObjectOptions;
@@ -97,10 +163,8 @@ namespace kotae.AssistantOverlays
             m_OptionsConfig[EObjectType.ArtifactSpot] = Config.ArtifactSpotOptions;
             m_OptionsConfig[EObjectType.LadderStone] = Config.LadderStoneOptions;
             m_OptionsConfig[EObjectType.Ladder] = Config.LadderOptions;
-            m_OptionsConfig[EObjectType.Shaft] = Config.LadderOptions;
             m_OptionsConfig[EObjectType.NPC] = Config.NPCOptions;
             m_OptionsConfig[EObjectType.Monster] = Config.EnemyOptions;
-            m_OptionsConfig[EObjectType.CrabMonster] = Config.EnemyOptions;
             m_OptionsConfig[EObjectType.Quartz] = Config.QuartzOptions;
         }
 
@@ -441,17 +505,7 @@ namespace kotae.AssistantOverlays
 
                 if (npc.IsMonster)
                 {
-                    // "Rock Crab" is npc.Name on floor 15.
-                    // "Lava Crab" on floor 112
-                    // "Iridium Crab" on SC 32
-                    if ((npc.Name == "Rock Crab") || (npc.Name == "Lava Crab") || (npc.Name == "Iridium Crab"))
-                    {
-                        m_OutlineObjects[EObjectType.CrabMonster].Add(new ObjReference(npc.Name, (int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.CrabMonster, npc));
-                    }
-                    else
-                    {
-                        m_OutlineObjects[EObjectType.Monster].Add(new ObjReference(npc.Name, (int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.Monster, npc));
-                    }
+                    m_OutlineObjects[EObjectType.Monster].Add(new ObjReference(npc.Name, (int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.Monster, npc));
                 }
                 else
                 {
@@ -514,14 +568,9 @@ namespace kotae.AssistantOverlays
                     {
                         xTile.Tiles.Tile curTile = buildingsLayer.Tiles[i, j];
                         if (curTile == null) continue;
-                        if (curTile.TileIndex == 173)
+                        if ((curTile.TileIndex == 173) || (curTile.TileIndex == 174))
                         {
                             m_OutlineObjects[EObjectType.Ladder].Add(new ObjReference("Ladder", i, j, EObjectType.Ladder));
-                            mineshaftHasLadderSpawned = true;
-                        }
-                        else if (curTile.TileIndex == 174)
-                        {
-                            m_OutlineObjects[EObjectType.Shaft].Add(new ObjReference("Shaft", i, j, EObjectType.Shaft));
                             mineshaftHasLadderSpawned = true;
                         }
                     }
@@ -653,7 +702,7 @@ namespace kotae.AssistantOverlays
                 {
                     if (obj == null) continue;
                     Vector2 loc = new Vector2(obj.X * Game1.tileSize, obj.Y * Game1.tileSize);
-                    if (((pair.Key == EObjectType.NPC) || (pair.Key == EObjectType.CrabMonster) || (pair.Key == EObjectType.Monster))
+                    if (((pair.Key == EObjectType.NPC) || (pair.Key == EObjectType.Monster))
                         && (obj._Ref != null))
                     {
                         loc = (obj._Ref as NPC).Position;

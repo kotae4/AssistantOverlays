@@ -29,6 +29,7 @@ namespace kotae.AssistantOverlays
         public ConfigCategoryOptions HayGrassOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Purple, ShouldShowInList = false };
         public ConfigCategoryOptions GenericForageableOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Aquamarine };
         public ConfigCategoryOptions TreeOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.MonoGameOrange, ShouldShowInList = false };
+        public ConfigCategoryOptions FruitTreeOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.MonoGameOrange };
         public ConfigCategoryOptions CropOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Orange };
         public ConfigCategoryOptions ArtifactSpotOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Magenta };
         public ConfigCategoryOptions GenericObjectOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Lime, ShouldShowInList = false };
