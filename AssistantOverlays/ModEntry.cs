@@ -45,29 +45,22 @@ namespace kotae.AssistantOverlays
             }
         }
 
-        Texture2D pixelTex;
-        Rectangle outlineRect = new Rectangle(0, 0, Game1.tileSize, Game1.tileSize);
-
-        Dictionary<EObjectType, List<ObjReference>> m_OutlineObjects = new Dictionary<EObjectType, List<ObjReference>>();
-        MineShaft m_ActiveMineshaft;
-        bool mineshaftHasLadderSpawned = false;
-        bool mineshaftMustKillEnemies = false;
-        int mineshaftLadderStones = 0;
-        Vector2 mineshaftLadderPos = new Vector2(0f, 0f);
-
-        int mineshaft_NumCopperNodes = 0;
-        int mineshaft_NumIronNodes = 0;
-        int mineshaft_NumGoldNodes = 0;
-        int mineshaft_NumIridiumNodes = 0;
-        int mineshaft_NumShrooms = 0;
-
         IModHelper _Helper;
         ModConfig Config;
+        Dictionary<EObjectType, ConfigCategoryOptions> m_OptionsConfig = new Dictionary<EObjectType, ConfigCategoryOptions>();
+
+        Texture2D pixelTex;
+        Rectangle outlineRect = new Rectangle(0, 0, Game1.tileSize, Game1.tileSize);
+        Dictionary<EObjectType, List<ObjReference>> m_OutlineObjects = new Dictionary<EObjectType, List<ObjReference>>();
+
+        bool mineshaftHasLadderSpawned = false;
+        bool mineshaftMustKillEnemies = false;
 
         public override void Entry(IModHelper helper)
         {
             _Helper = helper;
             Config = _Helper.ReadConfig<ModConfig>();
+            MapConfigOptions();
 
             foreach (EObjectType type in Enum.GetValues(typeof(EObjectType)))
             {
@@ -79,12 +72,36 @@ namespace kotae.AssistantOverlays
             helper.Events.Display.RenderedWorld += Display_RenderedWorld;
             helper.Events.Display.RenderedHud += Display_RenderedHud;
             helper.Events.GameLoop.DayStarted += GameLoop_DayStarted;
-            helper.Events.GameLoop.OneSecondUpdateTicked += GameLoop_OneSecondUpdateTicked;
         }
 
-        private void GameLoop_OneSecondUpdateTicked(object? sender, StardewModdingAPI.Events.OneSecondUpdateTickedEventArgs e)
+        void MapConfigOptions()
         {
-            Monitor.Log($"Client viewport: {Game1.viewport.X}, {Game1.viewport.Y}, {Game1.viewport.Width}, {Game1.viewport.Height}");
+            // in case i add more object types later but forget to create configs for them:
+            foreach (EObjectType type in Enum.GetValues(typeof(EObjectType)))
+            {
+                m_OptionsConfig.Add(type, new ConfigCategoryOptions() { DrawColor = Color.White, ShouldDrawOverlay = false, ShouldDrawSnaplines = false, ShouldShowInList = false });
+            }
+
+            m_OptionsConfig[EObjectType.Debris] = Config.DebrisOptions;
+            m_OptionsConfig[EObjectType.GenericForageable] = Config.GenericForageableOptions;
+            m_OptionsConfig[EObjectType.GenericObject] = Config.GenericObjectOptions;
+            m_OptionsConfig[EObjectType.FiberWeeds] = Config.FiberWeedsOptions;
+            m_OptionsConfig[EObjectType.HayGrass] = Config.HayGrassOptions;
+            m_OptionsConfig[EObjectType.Tree] = Config.TreeOptions;
+            m_OptionsConfig[EObjectType.FruitTree] = Config.TreeOptions;
+            m_OptionsConfig[EObjectType.Crop] = Config.CropOptions;
+            m_OptionsConfig[EObjectType.ResourceClump] = Config.ResourceClumpOptions;
+            m_OptionsConfig[EObjectType.OverlayObject] = Config.OverlayObjectOptions;
+            m_OptionsConfig[EObjectType.Bush] = Config.BushOptions;
+            m_OptionsConfig[EObjectType.Truffle] = Config.TruffleOptions;
+            m_OptionsConfig[EObjectType.ArtifactSpot] = Config.ArtifactSpotOptions;
+            m_OptionsConfig[EObjectType.LadderStone] = Config.LadderStoneOptions;
+            m_OptionsConfig[EObjectType.Ladder] = Config.LadderOptions;
+            m_OptionsConfig[EObjectType.Shaft] = Config.LadderOptions;
+            m_OptionsConfig[EObjectType.NPC] = Config.NPCOptions;
+            m_OptionsConfig[EObjectType.Monster] = Config.EnemyOptions;
+            m_OptionsConfig[EObjectType.CrabMonster] = Config.EnemyOptions;
+            m_OptionsConfig[EObjectType.Quartz] = Config.QuartzOptions;
         }
 
         private void ClearOutlineList()
@@ -99,7 +116,6 @@ namespace kotae.AssistantOverlays
         {
             // clear all overlay lists
             ClearOutlineList();
-            mineshaftLadderStones = 0;
         }
 
         ECompassDirection GetCompassDirectionFromTo(Vector2 from, Vector2 to)
@@ -272,7 +288,7 @@ namespace kotae.AssistantOverlays
 
                 if ((obj.townBush.Value == false) && (obj.tileSheetOffset.Value == 1) && (obj.inBloom(Game1.GetSeasonForLocation(location), Game1.dayOfMonth)))
                 {
-                    m_OutlineObjects[EObjectType.Bush].Add(new ObjReference($"Bush [{(int)obj.tilePosition.Value.X}, {(int)obj.tilePosition.Value.Y}]", (int)obj.tilePosition.Value.X, (int)obj.tilePosition.Value.Y, EObjectType.Bush, obj));
+                    m_OutlineObjects[EObjectType.Bush].Add(new ObjReference($"Bush", (int)obj.tilePosition.Value.X, (int)obj.tilePosition.Value.Y, EObjectType.Bush, obj));
                 }
             }
             else if (feature is LargeTerrainFeature)
@@ -476,30 +492,20 @@ namespace kotae.AssistantOverlays
                         // NOTES:
                         // diamond ore has item.Name of "Stone" and item.Type of "Basic" and a sheetIndex of 2. normal stone has sheet index around 48-54 with null type.
                         // quartz has DisplayName and Name of "Quartz" and type "Minerals".
-                        // iron has item.Type of "Basic" and sheetindex of 290.
+                        // copper has sheetIndex of 751
+                        // iron has sheetIndex of 290.
+                        // gold has sheetIndex of 764
+                        // iridum is probably 765? 668 and 670 are something too
                         // red mushroom has DisplayName and Name of "Red Mushroom" and type "Basic" with sheetIndex of 420 (nice)
                         // amethyst ore has item.Name of "Stone" and does NOT have an item.Type, has a sheetIndex of 8.
                         // the minerals (diamond, amethyst, ruby, etc) seem to be 2-14, multiples of 2.
                         // topaz is 10
-                        // gold has sheetIndex of 764
-                        // copper has sheetIndex of 751
-                        // iridum is probably 765? 668 and 670 are something too
                         if (item.Name.Equals("Stone"))
                         {
                             if (IsLadderStone(shaft, i, j, stonesRemaining, mineshaftHasLadderSpawned))
                             {
                                 m_OutlineObjects[EObjectType.LadderStone].Add(new ObjReference("Ladder Stone", (int)item.TileLocation.X, (int)item.TileLocation.Y, EObjectType.LadderStone));
-                                mineshaftLadderStones++;
                             }
-                            // check if it's an ore too, for text overlays
-                            if (item.ParentSheetIndex == 751)
-                                mineshaft_NumCopperNodes += 1;
-                            else if (item.ParentSheetIndex == 290)
-                                mineshaft_NumIronNodes += 1;
-                            else if (item.ParentSheetIndex == 764)
-                                mineshaft_NumGoldNodes += 1;
-                            else if (item.ParentSheetIndex == 765)
-                                mineshaft_NumIridiumNodes += 1;
                         }
                     }
                     // check if tileindex on Buildings layer is 173 (ladder) or 174 (shaft)
@@ -511,15 +517,11 @@ namespace kotae.AssistantOverlays
                         if (curTile.TileIndex == 173)
                         {
                             m_OutlineObjects[EObjectType.Ladder].Add(new ObjReference("Ladder", i, j, EObjectType.Ladder));
-                            mineshaftLadderPos.X = i;
-                            mineshaftLadderPos.Y = j;
                             mineshaftHasLadderSpawned = true;
                         }
                         else if (curTile.TileIndex == 174)
                         {
                             m_OutlineObjects[EObjectType.Shaft].Add(new ObjReference("Shaft", i, j, EObjectType.Shaft));
-                            mineshaftLadderPos.X = i;
-                            mineshaftLadderPos.Y = j;
                             mineshaftHasLadderSpawned = true;
                         }
                     }
@@ -553,21 +555,24 @@ namespace kotae.AssistantOverlays
             ProcessLargeTerrainFeatures(location);
             //Monitor.Log("=== Processing Resource Clumps ===");
             ProcessResourceClumps(location);
-            
             //Monitor.Log("=== Processing Overlay Objects ===");
             ProcessOverlayObjects(location);
             //Monitor.Log("=== Processing Debris ===");
             ProcessDebris(location);
-            //Monitor.Log("=== Processing Furniture ===");
-            ProcessFurniture(location);
             //Monitor.Log("=== Processing NPCs ===");
             ProcessNPCs(location);
 
+
+            /* don't see a point to having these, 
+             * but maybe there's some weird object that's technically a building or furniture that we would be interested in in the future
+            //Monitor.Log("=== Processing Furniture ===");
+            ProcessFurniture(location);
             if (location is BuildableGameLocation)
             {
                 //Monitor.Log("=== Processing Buildings ===");
                 ProcessSpecial_Buildings((location as BuildableGameLocation));
             }
+            */
 
             if (location is MineShaft)
             {
@@ -614,57 +619,10 @@ namespace kotae.AssistantOverlays
         Color GetColorByObjectType(EObjectType type)
         {
             Color retColor = Color.White;
-            switch (type)
-            {
-                case EObjectType.Truffle:
-                    retColor = Config.TruffleColor;
-                    break;
-                case EObjectType.LadderStone:
-                    retColor = Config.LadderStoneColor;
-                    break;
-                case EObjectType.Ladder:
-                case EObjectType.Shaft:
-                    retColor = Config.LadderColor;
-                    break;
-                case EObjectType.Monster:
-                case EObjectType.CrabMonster:
-                    retColor = Config.EnemyColor;
-                    break;
-                case EObjectType.Quartz:
-                    retColor = Config.QuartzColor;
-                    break;
-                case EObjectType.OverlayObject:
-                    retColor = Config.OverlayObjectColor;
-                    break;
-                case EObjectType.Debris:
-                    retColor = Config.DebrisColor;
-                    break;
-                case EObjectType.Bush:
-                    retColor = Config.BushColor;
-                    break;
-                case EObjectType.ResourceClump:
-                    retColor = Config.ResourceClumpColor;
-                    break;
-                case EObjectType.HayGrass:
-                    retColor = Config.HayGrassColor;
-                    break;
-                case EObjectType.GenericForageable:
-                    retColor = Config.GenericForageableColor;
-                    break;
-                case EObjectType.Tree:
-                case EObjectType.FruitTree:
-                    retColor = Config.TreeColor;
-                    break;
-                case EObjectType.Crop:
-                    retColor = Config.CropColor;
-                    break;
-                case EObjectType.ArtifactSpot:
-                    retColor = Config.ArtifactSpotColor;
-                    break;
-                case EObjectType.GenericObject:
-                    retColor = Config.GenericObjectColor;
-                    break;
-            }
+
+            if (m_OptionsConfig.ContainsKey(type))
+                retColor = m_OptionsConfig[type].DrawColor;
+
             return retColor;
         }
 
@@ -677,12 +635,19 @@ namespace kotae.AssistantOverlays
 
             // now draw all the outlines
             xTile.Dimensions.Rectangle viewport = Game1.viewport;
+            // ladders get special handling for snapline. we only draw to the nearest.
+            bool shouldDrawLadderSnapline = m_OptionsConfig[EObjectType.Ladder].ShouldDrawSnaplines || m_OptionsConfig[EObjectType.LadderStone].ShouldDrawSnaplines;
             bool localPlayerIsInMines = ((Game1.player.currentLocation != null) && (Game1.player.currentLocation.Name.ToLower().Contains("mine")));
             float closestLadderDist = float.MaxValue;
             ObjReference closestLadderObj = null;
+
             Vector2 localPlayerScreenPos = new Vector2(Game1.player.Position.X - viewport.X, Game1.player.Position.Y - viewport.Y);
             foreach (KeyValuePair<EObjectType, List<ObjReference>> pair in m_OutlineObjects)
             {
+                // early exit condition
+                if ((m_OptionsConfig[pair.Key].ShouldDrawSnaplines == false) && (m_OptionsConfig[pair.Key].ShouldDrawOverlay == false))
+                    continue;
+
                 Color activeColor = GetColorByObjectType(pair.Key);
                 foreach (ObjReference obj in pair.Value)
                 {
@@ -695,8 +660,20 @@ namespace kotae.AssistantOverlays
                     }
                     outlineRect.X = (int)loc.X - viewport.X;
                     outlineRect.Y = (int)loc.Y - viewport.Y;
-                    DrawOutline(e.SpriteBatch, outlineRect, activeColor, 3);
 
+                    // draw outline for object types that have it enabled
+                    if (m_OptionsConfig[pair.Key].ShouldDrawOverlay)
+                        DrawOutline(e.SpriteBatch, outlineRect, activeColor, 3);
+
+                    // draw snaplines for object types that have it enabled
+                    if ((m_OptionsConfig[pair.Key].ShouldDrawSnaplines) && (pair.Key != EObjectType.LadderStone) && (pair.Key != EObjectType.Ladder))
+                    {
+                        outlineRect.X = (int)(obj.X * Game1.tileSize) - viewport.X + (Game1.tileSize / 2);
+                        outlineRect.Y = (int)(obj.Y * Game1.tileSize) - viewport.Y + (Game1.tileSize / 2);
+                        DrawLineTo(e.SpriteBatch, localPlayerScreenPos, new Vector2(outlineRect.X, outlineRect.Y), GetColorByObjectType(pair.Key));
+                    }
+
+                    // special handling for monsters, draw their health value over their head
                     if (obj._Ref is StardewValley.Monsters.Monster)
                     {
                         Vector2 textDimensions = Game1.smallFont.MeasureString((obj._Ref as StardewValley.Monsters.Monster).Health.ToString());
@@ -705,7 +682,8 @@ namespace kotae.AssistantOverlays
                         e.SpriteBatch.DrawString(Game1.smallFont, (obj._Ref as StardewValley.Monsters.Monster).Health.ToString(), new Vector2(outlineRect.X, outlineRect.Y), activeColor);
                     }
 
-                    if ((localPlayerIsInMines) && ((obj.Type == EObjectType.LadderStone) || (obj.Type == EObjectType.Ladder)))
+                    // special handling for ladder snaplines: get nearest ladder / ladderstone
+                    if ((localPlayerIsInMines) && (shouldDrawLadderSnapline) && ((obj.Type == EObjectType.LadderStone) || (obj.Type == EObjectType.Ladder)))
                     {
                         float dist = Vector2.DistanceSquared(localPlayerScreenPos, new Vector2(outlineRect.X, outlineRect.Y));
                         if (dist < closestLadderDist)
@@ -716,7 +694,9 @@ namespace kotae.AssistantOverlays
                     }
                 }
             }
-            if ((localPlayerIsInMines) && (closestLadderObj != null))
+
+            // special handling for ladder snaplines: draw line to **only** the nearest ladder / ladderstone
+            if ((localPlayerIsInMines) && (shouldDrawLadderSnapline) && (closestLadderObj != null))
             {
                 // draw line to closest ladder
                 outlineRect.X = (int)(closestLadderObj.X * Game1.tileSize) - viewport.X + (Game1.tileSize / 2);
@@ -729,61 +709,27 @@ namespace kotae.AssistantOverlays
         {
             if ((!Context.IsWorldReady) || (Game1.eventUp)) return;
             // show helpful information based on where the player is located:
-            // farm: how many truffles are waiting to be picked up
-            // mineshaft: whether the ladder has already spawned, how many enemies remain, whether all enemies need to be killed
-            // everywhere: how many generic forageables are on the map
+            // mineshaft: how many enemies remain, whether all enemies need to be killed
+            // everywhere: everything else
             string drawStr = "";
-            if (Game1.player.currentLocation.IsFarm)
-            {
-                drawStr = "Truffles: " + m_OutlineObjects[EObjectType.Truffle].Count.ToString();
-            }
-            else if ((Game1.player.currentLocation.NameOrUniqueName.StartsWith("UndergroundMine")) && (m_ActiveMineshaft != null))
+            if (Game1.player.currentLocation.NameOrUniqueName.StartsWith("UndergroundMine"))
             {
                 MineShaft shaft = Game1.player.currentLocation as MineShaft;
                 drawStr = "Enemies: " + shaft.EnemyCount.ToString();
-                if (mineshaft_NumShrooms > 0)
+                if (mineshaftMustKillEnemies)
                 {
-                    drawStr += "\nMushrooms: " + mineshaft_NumShrooms.ToString();
-                }
-                if (mineshaft_NumCopperNodes > 0)
-                {
-                    drawStr += "\nCopper: " + mineshaft_NumCopperNodes.ToString();
-                }
-                if (mineshaft_NumIronNodes > 0)
-                {
-                    drawStr += "\nIron: " + mineshaft_NumIronNodes.ToString();
-                }
-                if (mineshaft_NumGoldNodes > 0)
-                {
-                    drawStr += "\nGold: " + mineshaft_NumGoldNodes.ToString();
-                }
-                if (mineshaft_NumIridiumNodes > 0)
-                {
-                    drawStr += "\nIridium: " + mineshaft_NumIridiumNodes.ToString();
-                }
-                if (mineshaftHasLadderSpawned)
-                {
-                    drawStr += "\nLadder: " + GetCompassDirectionFromTo(Game1.player.getTileLocation(), mineshaftLadderPos).ToString();
-                }
-                else
-                {
-                    if (mineshaftMustKillEnemies)
-                    {
-                        drawStr += "\nMustKill: " + mineshaftMustKillEnemies.ToString();
-                    }
-                    else
-                    {
-                        drawStr += "\nLadderStones: " + mineshaftLadderStones.ToString();
-                    }
+                    drawStr += "\nMustKill: " + mineshaftMustKillEnemies.ToString();
                 }
             }
 
-            // list out all the forageables on the map
+            // list out all the tracked items on the map
             Dictionary<string, int> specificObjCounts = new Dictionary<string, int>();
             foreach(KeyValuePair<EObjectType, List<ObjReference>> pair in m_OutlineObjects)
             {
                 if ((pair.Value == null) || (pair.Value.Count == 0)) continue;
-                
+
+                if (m_OptionsConfig[pair.Key].ShouldShowInList == false) continue;
+
                 drawStr += "\n" + pair.Key.ToString() + ": " + pair.Value.Count.ToString();
                 foreach (ObjReference obj in pair.Value)
                 {
@@ -793,7 +739,6 @@ namespace kotae.AssistantOverlays
                         specificObjCounts[obj.Name]++;
                     else
                         specificObjCounts[obj.Name] = 1;
-
                 }
 
                 foreach (KeyValuePair<string, int> objPair in specificObjCounts)
@@ -804,7 +749,7 @@ namespace kotae.AssistantOverlays
                 specificObjCounts.Clear();
             }
 
-            e.SpriteBatch.DrawString(Game1.smallFont, drawStr, new Vector2(10f, 65f), Config.TextColor);
+            e.SpriteBatch.DrawString(Game1.smallFont, drawStr, new Vector2(10f, 65f), Config.DefaultTextColor);
         }
     }
 }

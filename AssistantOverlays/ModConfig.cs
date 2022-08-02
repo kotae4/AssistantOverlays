@@ -8,24 +8,32 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace kotae.AssistantOverlays
 {
+    public class ConfigCategoryOptions
+    {
+        public bool ShouldShowInList { get; set; } = true;
+        public bool ShouldDrawOverlay { get; set; } = true;
+        public bool ShouldDrawSnaplines { get; set; } = false;
+        public Color DrawColor { get; set; } = Color.White;
+    }
     public class ModConfig
     {
-        public Color TruffleColor { get; set; } = Color.Blue;
-        public Color LadderStoneColor { get; set; } = Color.Lime;
-        public Color LadderColor { get; set; } = Color.Magenta;
-        public Color EnemyColor { get; set; } = Color.Red;
-
-        public Color QuartzColor { get; set; } = Color.Brown;
-        public Color OverlayObjectColor { get; set; } = Color.Coral;
-        public Color DebrisColor { get; set; } = Color.DeepPink;
-        public Color BushColor { get; set; } = Color.Blue;
-        public Color ResourceClumpColor { get; set; } = Color.Yellow;
-        public Color HayGrassColor { get; set; } = Color.Purple;
-        public Color GenericForageableColor { get; set; } = Color.Aquamarine;
-        public Color TreeColor { get; set; } = Color.MonoGameOrange;
-        public Color CropColor { get; set; } = Color.Orange;
-        public Color ArtifactSpotColor { get; set; } = Color.Magenta;
-        public Color GenericObjectColor { get; set; } = Color.Lime;
-        public Color TextColor { get; set; } = Color.White;
+        public ConfigCategoryOptions TruffleOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Blue };
+        public ConfigCategoryOptions LadderStoneOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Lime, ShouldDrawSnaplines = true };
+        public ConfigCategoryOptions LadderOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Magenta, ShouldDrawSnaplines = true };
+        public ConfigCategoryOptions EnemyOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Red };
+        public ConfigCategoryOptions QuartzOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Brown, ShouldDrawSnaplines = true };
+        public ConfigCategoryOptions OverlayObjectOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Coral };
+        public ConfigCategoryOptions DebrisOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.DeepPink };
+        public ConfigCategoryOptions BushOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Blue };
+        public ConfigCategoryOptions ResourceClumpOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Yellow };
+        public ConfigCategoryOptions HayGrassOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Purple, ShouldShowInList = false };
+        public ConfigCategoryOptions GenericForageableOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Aquamarine };
+        public ConfigCategoryOptions TreeOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.MonoGameOrange, ShouldShowInList = false };
+        public ConfigCategoryOptions CropOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Orange };
+        public ConfigCategoryOptions ArtifactSpotOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Magenta };
+        public ConfigCategoryOptions GenericObjectOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Lime, ShouldShowInList = false };
+        public ConfigCategoryOptions FiberWeedsOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.BlanchedAlmond };
+        public ConfigCategoryOptions NPCOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Blue, ShouldShowInList = false };
+        public Color DefaultTextColor { get; set; } = Color.White;
     }
 }
