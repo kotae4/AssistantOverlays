@@ -7,6 +7,8 @@ using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Locations;
 using StardewValley.Network;
+using StardewValley.Menus;
+using StardewValley.BellsAndWhistles;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Netcode;
@@ -138,6 +140,35 @@ namespace kotae.AssistantOverlays
                     max: 255
                     );
             }
+
+            configMenu.AddSectionTitle(
+                mod: this.ModManifest,
+                text: () => "Default Text Color"
+                );
+            configMenu.AddNumberOption(
+                    mod: this.ModManifest,
+                    name: () => "Default Text Color R",
+                    getValue: () => Config.DefaultTextColor.R,
+                    setValue: value => Config.DefaultTextColor = new Color(value, Config.DefaultTextColor.G, Config.DefaultTextColor.B),
+                    min: 0,
+                    max: 255
+                    );
+            configMenu.AddNumberOption(
+                mod: this.ModManifest,
+                name: () => "Default Text Color G",
+                getValue: () => Config.DefaultTextColor.G,
+                setValue: value => Config.DefaultTextColor = new Color(Config.DefaultTextColor.R, value, Config.DefaultTextColor.B),
+                min: 0,
+                max: 255
+                );
+            configMenu.AddNumberOption(
+                mod: this.ModManifest,
+                name: () => "Default Text Color B",
+                getValue: () => Config.DefaultTextColor.B,
+                setValue: value => Config.DefaultTextColor = new Color(Config.DefaultTextColor.R, Config.DefaultTextColor.G, value),
+                min: 0,
+                max: 255
+                );
         }
 
         void MapConfigOptions()
@@ -798,7 +829,14 @@ namespace kotae.AssistantOverlays
                 specificObjCounts.Clear();
             }
 
-            e.SpriteBatch.DrawString(Game1.smallFont, drawStr, new Vector2(10f, 65f), Config.DefaultTextColor);
+            if (string.IsNullOrEmpty(drawStr))
+                return;
+
+            Vector2 textDimensions = Game1.smallFont.MeasureString(drawStr);
+            e.SpriteBatch.Draw(pixelTex, new Rectangle(5, 50, (int)textDimensions.X + 40, (int)textDimensions.Y + 20), new Color(0, 0, 0, 80));
+            //IClickableMenu.drawTextureBox(e.SpriteBatch, Game1.mouseCursors, new Rectangle(384, 373, 18, 18), 5, 50, (int)textDimensions.X + 40, (int)textDimensions.Y + 20, new Color(255, 255, 255, 80), 4f, true);
+
+            e.SpriteBatch.DrawString(Game1.smallFont, drawStr, new Vector2(25f, 52f), Config.DefaultTextColor);
         }
     }
 }
