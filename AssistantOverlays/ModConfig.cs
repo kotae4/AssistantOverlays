@@ -15,6 +15,12 @@ namespace kotae.AssistantOverlays
         public bool ShouldDrawSnaplines { get; set; } = false;
         public Color DrawColor { get; set; } = Color.White;
     }
+
+    public class ConfigToggleOptions
+    {
+        public bool ShouldShowInList { get; set; } = true;
+    }
+
     public class ModConfig
     {
         public ConfigCategoryOptions TruffleOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Blue };
@@ -35,6 +41,13 @@ namespace kotae.AssistantOverlays
         public ConfigCategoryOptions GenericObjectOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Lime, ShouldShowInList = false };
         public ConfigCategoryOptions FiberWeedsOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.BlanchedAlmond };
         public ConfigCategoryOptions NPCOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Blue, ShouldShowInList = false };
+
+        public ConfigCategoryOptions CopperNodeOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Orange, ShouldShowInList = true };
+        public ConfigCategoryOptions IronNodeOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Orange, ShouldShowInList = true };
+        public ConfigCategoryOptions GoldNodeOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Orange, ShouldShowInList = true };
+        public ConfigCategoryOptions IridiumNodeOptions { get; set; } = new ConfigCategoryOptions() { DrawColor = Color.Orange, ShouldShowInList = true, ShouldDrawSnaplines = true };
+
+        public ConfigToggleOptions ShowMushroomFloor { get; set; } = new ConfigToggleOptions() { ShouldShowInList = true };
         public Color DefaultTextColor { get; set; } = Color.White;
     }
 }

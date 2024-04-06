@@ -13,6 +13,8 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Netcode;
 using StardewValley.TerrainFeatures;
+using StardewValley.ItemTypeDefinitions;
+using StardewValley.GameData.GiantCrops;
 
 namespace kotae.AssistantOverlays
 {
@@ -23,7 +25,8 @@ namespace kotae.AssistantOverlays
             Debris, GenericForageable, GenericObject, FiberWeeds, HayGrass,
             Tree, FruitTree, Crop, ResourceClump,
             OverlayObject,
-            Bush, Truffle, ArtifactSpot, 
+            Bush, Truffle, ArtifactSpot,
+            CopperNode, IronNode, GoldNode, IridiumNode,
             LadderStone, Ladder, NPC, Monster,
             Quartz
         }
@@ -169,6 +172,17 @@ namespace kotae.AssistantOverlays
                 min: 0,
                 max: 255
                 );
+
+            configMenu.AddSectionTitle(
+                mod: this.ModManifest,
+                text: () => "Toggles"
+                );
+            configMenu.AddBoolOption(
+                mod: this.ModManifest,
+                name: () => "Show Mushroom Floors",
+                getValue: () => Config.ShowMushroomFloor.ShouldShowInList,
+                setValue: value => Config.ShowMushroomFloor.ShouldShowInList = value
+                );
         }
 
         void MapConfigOptions()
@@ -232,7 +246,10 @@ namespace kotae.AssistantOverlays
 
         bool IsLadderStone(MineShaft shaft, int tileX, int tileY, int stonesRemaining, bool hasLadderSpawned)
         {
-            Random random = new Random((((tileX * 1000) + tileY) + shaft.mineLevel) + (((int)Game1.uniqueIDForThisGame) / 2));
+            // pre-1.6
+            //Random random = new Random((((tileX * 1000) + tileY) + shaft.mineLevel) + (((int)Game1.uniqueIDForThisGame) / 2));
+            // post-1.6
+            Random random = Utility.CreateDaySaveRandom(tileX * 1000, tileY, shaft.mineLevel);
             random.NextDouble();
             double chanceToSpawnLadder = ((0.02 + (1.0 / ((double)Math.Max(1, stonesRemaining - 1)))) + (((double)Game1.player.LuckLevel) / 100.0)) + (Game1.player.DailyLuck / 5.0);
             // BUGFIX:
@@ -265,7 +282,7 @@ namespace kotae.AssistantOverlays
                 {
                     m_OutlineObjects[EObjectType.Truffle].Add(new ObjReference($"{name} (Truffle)", (int)objPos.X, (int)objPos.Y, EObjectType.Truffle, obj));
                 }
-                else if ((obj.IsSpawnedObject) || (obj.isForage(location)))
+                else if ((obj.IsSpawnedObject) || (obj.isForage()))
                 {
                     m_OutlineObjects[EObjectType.GenericForageable].Add(new ObjReference($"{name} ({itemName})", (int)objPos.X, (int)objPos.Y, EObjectType.GenericForageable, obj));
                 }
@@ -294,29 +311,35 @@ namespace kotae.AssistantOverlays
                 if (obj.hasSeed.Value == true)
                 {
                     string treeName = "unknown";
+                    // TODO check if mystic trees, winter trees (1 and 2), and green tree variants are shakeable
                     switch (obj.treeType.Value)
                     {
-                        case 1:
+                        case "1":
+                        case "10":
                             treeName = "oak";
                             break;
-                        case 2:
+                        case "2":
+                        case "11":
                             treeName = "maple";
                             break;
-                        case 3:
+                        case "3":
                             treeName = "pine";
                             break;
-                        case 7:
+                        case "7":
                             treeName = "mushroom";
                             break;
-                        case 8:
+                        case "8":
                             treeName = "mahogany";
                             break;
-                        case 6:
-                        case 9:
+                        case "6":
+                        case "9":
                             treeName = "palm";
                             break;
+                        case "12":
+                            treeName = "fern";
+                            break;
                     }
-                    m_OutlineObjects[EObjectType.Tree].Add(new ObjReference($"Shake-able Tree ({treeName})", (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.Tree, obj));
+                    m_OutlineObjects[EObjectType.Tree].Add(new ObjReference($"Shake-able Tree ({treeName})", (int)obj.Tile.X, (int)obj.Tile.Y, EObjectType.Tree, obj));
                 }
                 // TO-DO:
                 // maybe check for tapper as well? or maybe the tapper is part of 'objects' list?
@@ -325,26 +348,12 @@ namespace kotae.AssistantOverlays
             {
                 //Monitor.Log("Saw FruitTree: " + feature.ToString() + "(" + feature.GetType().Name + ")");
                 FruitTree obj = feature as FruitTree;
-                if (obj.fruitsOnTree.Value > 0)
+                if (obj.fruit.Count > 0)
                 {
                     string name = $"Fruit Tree";
-                    string fruitName = "unknown_fruit";
-                    try
-                    {
-                        if (Game1.objectInformation.ContainsKey(obj.indexOfFruit.Value) == true)
-                        {
-                            fruitName = Game1.objectInformation[obj.indexOfFruit.Value].Split('/')[0];
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Monitor.Log($"Handled exception parsing fruit tree item (item index={obj.indexOfFruit.Value}): {ex.Message}");
-                    }
-                    finally
-                    {
-                        name = $"{name} ({obj.fruitsOnTree.Value} {fruitName})";
-                        m_OutlineObjects[EObjectType.FruitTree].Add(new ObjReference(name, (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.FruitTree, obj));
-                    }
+                    string fruitName = obj.fruit[0].DisplayName;
+                    name = $"{name} ({obj.fruit.Count} {fruitName})";
+                    m_OutlineObjects[EObjectType.FruitTree].Add(new ObjReference(name, (int)obj.Tile.X, (int)obj.Tile.Y, EObjectType.FruitTree, obj));
                 }
             }
             else if (feature is StardewValley.TerrainFeatures.Grass)
@@ -354,7 +363,7 @@ namespace kotae.AssistantOverlays
                 // TO-DO:
                 // RNG calculation for whether scything this grass will yield hay
                 // it seems there's also a super tiny chance that it could yield object IDs 114, 4, or 92. don't know what those are.
-                m_OutlineObjects[EObjectType.HayGrass].Add(new ObjReference("Hay Grass", (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.HayGrass, obj));
+                m_OutlineObjects[EObjectType.HayGrass].Add(new ObjReference("Hay Grass", (int)obj.Tile.X, (int)obj.Tile.Y, EObjectType.HayGrass, obj));
             }
             else if (feature is StardewValley.TerrainFeatures.HoeDirt)
             {
@@ -363,27 +372,18 @@ namespace kotae.AssistantOverlays
                 string name = "Crop";
                 if ((obj.crop != null) && (obj.readyForHarvest()))
                 {
-                    string cropName = "unknown";
-                    if (Game1.objectInformation.ContainsKey(obj.crop.indexOfHarvest.Value))
-                    {
-                        cropName = Game1.objectInformation[obj.crop.indexOfHarvest.Value].Split('/')[0];
-                    }
-                    m_OutlineObjects[EObjectType.Crop].Add(new ObjReference($"{name} ({cropName})", (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.Crop, obj));
+                    ParsedItemData? itemData = ItemRegistry.GetData(obj.crop.indexOfHarvest.Value);
+                    string cropName = itemData?.DisplayName ?? "unknown";
+                    m_OutlineObjects[EObjectType.Crop].Add(new ObjReference($"{name} ({cropName})", (int)obj.Tile.X, (int)obj.Tile.Y, EObjectType.Crop, obj));
                 }
-            }
-            else if (feature is StardewValley.TerrainFeatures.Quartz)
-            {
-                //Monitor.Log("Saw Quartz Terrain Feature?");
-                Quartz obj = feature as Quartz;
-                m_OutlineObjects[EObjectType.Quartz].Add(new ObjReference("Quartz?? (no idea)", (int)obj.currentTileLocation.X, (int)obj.currentTileLocation.Y, EObjectType.Quartz, obj));
             }
             else if (feature is StardewValley.TerrainFeatures.Bush)
             {
                 Bush obj = feature as Bush;
 
-                if ((obj.townBush.Value == false) && (obj.tileSheetOffset.Value == 1) && (obj.inBloom(Game1.GetSeasonForLocation(location), Game1.dayOfMonth)))
+                if ((obj.townBush.Value == false) && (obj.tileSheetOffset.Value == 1) && (obj.inBloom()))
                 {
-                    m_OutlineObjects[EObjectType.Bush].Add(new ObjReference($"Bush", (int)obj.tilePosition.Value.X, (int)obj.tilePosition.Value.Y, EObjectType.Bush, obj));
+                    m_OutlineObjects[EObjectType.Bush].Add(new ObjReference($"Bush", (int)obj.Tile.X, (int)obj.Tile.Y, EObjectType.Bush, obj));
                 }
             }
             else if (feature is LargeTerrainFeature)
@@ -396,7 +396,7 @@ namespace kotae.AssistantOverlays
             {
                 //Monitor.Log("Saw ResourceClump: " + feature.ToString() + "(" + feature.GetType().Name + ")");
                 ResourceClump obj = feature as ResourceClump;
-                m_OutlineObjects[EObjectType.ResourceClump].Add(new ObjReference("ResourceClump (ERROR)", (int)obj.tile.Value.X, (int)obj.tile.Value.Y, EObjectType.ResourceClump, obj));
+                m_OutlineObjects[EObjectType.ResourceClump].Add(new ObjReference("ResourceClump (ERROR)", (int)obj.Tile.X, (int)obj.Tile.Y, EObjectType.ResourceClump, obj));
             }
         }
 
@@ -431,21 +431,10 @@ namespace kotae.AssistantOverlays
                 if (clump is GiantCrop)
                 {
                     GiantCrop giantCrop = clump as GiantCrop;
-                    int which = giantCrop.which.Value;
-                    switch (which)
+                    GiantCropData data = giantCrop.GetData();
+                    if (data != null)
                     {
-                        case GiantCrop.cauliflower:
-                            name = "Giant Crop (cauliflower)";
-                            break;
-                        case GiantCrop.melon:
-                            name = "Giant Crop (melon)";
-                            break;
-                        case GiantCrop.pumpkin:
-                            name = "Giant Crop (pumpkin)";
-                            break;
-                        default:
-                            name = "Giant Crop (unknown)";
-                            break;
+                        name = ItemRegistry.GetData(data.FromItemId)?.DisplayName ?? "Giant Crop (Unknown)";
                     }
                 }
                 else
@@ -480,9 +469,12 @@ namespace kotae.AssistantOverlays
                                 name = "Mine Boulder";
                                 break;
                             }
+                        default:
+                            name = $"Unknown Clump (sheetIndex: {clump.parentSheetIndex.Value}";
+                            break;
                     }
                 }
-                m_OutlineObjects[EObjectType.ResourceClump].Add(new ObjReference(name, (int)clump.tile.Value.X, (int)clump.tile.Value.Y, EObjectType.ResourceClump, clump));
+                m_OutlineObjects[EObjectType.ResourceClump].Add(new ObjReference(name, (int)clump.Tile.X, (int)clump.Tile.Y, EObjectType.ResourceClump, clump));
             }
         }
 
@@ -536,11 +528,11 @@ namespace kotae.AssistantOverlays
 
                 if (npc.IsMonster)
                 {
-                    m_OutlineObjects[EObjectType.Monster].Add(new ObjReference(npc.Name, (int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.Monster, npc));
+                    m_OutlineObjects[EObjectType.Monster].Add(new ObjReference(npc.Name, (int)npc.Tile.X, (int)npc.Tile.Y, EObjectType.Monster, npc));
                 }
                 else
                 {
-                    m_OutlineObjects[EObjectType.NPC].Add(new ObjReference(npc.Name, (int)npc.getTileLocation().X, (int)npc.getTileLocation().Y, EObjectType.NPC, npc));
+                    m_OutlineObjects[EObjectType.NPC].Add(new ObjReference(npc.Name, (int)npc.Tile.X, (int)npc.Tile.Y, EObjectType.NPC, npc));
                 }
             }
         }
@@ -591,6 +583,16 @@ namespace kotae.AssistantOverlays
                             {
                                 m_OutlineObjects[EObjectType.LadderStone].Add(new ObjReference("Ladder Stone", (int)item.TileLocation.X, (int)item.TileLocation.Y, EObjectType.LadderStone));
                             }
+
+                            // check if it's an ore too
+                            if (item.ParentSheetIndex == 751)
+                                m_OutlineObjects[EObjectType.CopperNode].Add(new ObjReference("Copper Node", (int)item.TileLocation.X, (int)item.TileLocation.Y, EObjectType.CopperNode));
+                            else if (item.ParentSheetIndex == 290)
+                                m_OutlineObjects[EObjectType.IronNode].Add(new ObjReference("Iron Node", (int)item.TileLocation.X, (int)item.TileLocation.Y, EObjectType.IronNode));
+                            else if (item.ParentSheetIndex == 764)
+                                m_OutlineObjects[EObjectType.GoldNode].Add(new ObjReference("Gold Node", (int)item.TileLocation.X, (int)item.TileLocation.Y, EObjectType.GoldNode));
+                            else if (item.ParentSheetIndex == 765)
+                                m_OutlineObjects[EObjectType.IridiumNode].Add(new ObjReference("Iridium Node", (int)item.TileLocation.X, (int)item.TileLocation.Y, EObjectType.IridiumNode));
                         }
                     }
                     // check if tileindex on Buildings layer is 173 (ladder) or 174 (shaft)
@@ -609,6 +611,7 @@ namespace kotae.AssistantOverlays
             }
         }
 
+        /*
         void ProcessSpecial_Buildings(BuildableGameLocation buildableLocation)
         {
             foreach (StardewValley.Buildings.Building building in buildableLocation.buildings)
@@ -618,6 +621,8 @@ namespace kotae.AssistantOverlays
                 Monitor.Log($"Saw building {building.ToString()} ({building.GetType().Name})");
             }
         }
+        */
+
         void ProcessCurrentLocation()
         {
             ClearOutlineList();
@@ -792,10 +797,27 @@ namespace kotae.AssistantOverlays
             // mineshaft: how many enemies remain, whether all enemies need to be killed
             // everywhere: everything else
             string drawStr = "";
+            if (Config.ShowMushroomFloor.ShouldShowInList == true)
+            {
+                // TODO figure out proper logic for determinig which floors will be mushroom floors
+                if ((MineShaft.mushroomLevelsGeneratedToday != null) && (MineShaft.mushroomLevelsGeneratedToday.Count > 0))
+                {
+                    drawStr += "Mushroom Floors: ";
+                    int count = 0;
+                    foreach (int floor in MineShaft.mushroomLevelsGeneratedToday)
+                    {
+                        count++;
+                        if (count == MineShaft.mushroomLevelsGeneratedToday.Count)
+                            drawStr += $"{floor}\n";
+                        else
+                            drawStr += $"{floor}, ";
+                    }
+                }
+            }
             if (Game1.player.currentLocation.NameOrUniqueName.StartsWith("UndergroundMine"))
             {
                 MineShaft shaft = Game1.player.currentLocation as MineShaft;
-                drawStr = "Enemies: " + shaft.EnemyCount.ToString();
+                drawStr += "Enemies: " + shaft.EnemyCount.ToString();
                 if (mineshaftMustKillEnemies)
                 {
                     drawStr += "\nMustKill: " + mineshaftMustKillEnemies.ToString();
